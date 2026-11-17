@@ -637,11 +637,14 @@ class Rocket {
     let homeVel = p5.Vector.sub(home.positionAt(1), home.positionAt(0));
     let prograde = homeVel.copy().normalize();
     this.position = p5.Vector.add(home.position, p5.Vector.mult(prograde, home.radius + 4 * s));
-    this.velocity = p5.Vector.add(homeVel, p5.Vector.mult(prograde, 1.8 * s));
+    // 테라의 중력을 확실히 벗어나도록 탈출 속도보다 빠르게 출발 (탈출 속도 = √(2GM / r))
+    let escape = sqrt((2 * G * home.mass) / (home.radius + 4 * s));
+    this.prograde = prograde;
+    this.velocity = p5.Vector.add(homeVel, p5.Vector.mult(prograde, escape * 1.5));
     this.acceleration = createVector(0, 0);
 
-    this.maxSpeed = 4.5 * s;
-    this.maxForce = 0.12 * s;
+    this.maxSpeed = 5 * s;
+    this.maxForce = 0.25 * s;  // 태양 가까이(메르 궤도)에서도 버틸 만큼의 추진력
     this.size = 7 * s;
     this.age = 0;
     this.thrust = 1;
@@ -672,6 +675,7 @@ class Rocket {
     }
     // 발사 직후에는 순행 방향 그대로 관성 비행
     if (this.age < 30) {
+      this.applyForce(p5.Vector.mult(this.prograde, this.maxForce)); // 이륙 추진
       this.thrust = 1;
       return;
     }
@@ -682,7 +686,7 @@ class Rocket {
     let aim = t.positionAt(eta);
     let targetVel = p5.Vector.sub(t.positionAt(1), t.positionAt(0));
 
-    let safe = sun.radius * 3.2;
+    let safe = sun.radius * 2.1; // 메르(가장 안쪽 행성) 궤도보다 안쪽
     let desired;
 
     // 목적지까지 직선이 태양을 스치면, 태양 옆을 돌아가는 경유지를 먼저 겨냥
@@ -702,6 +706,15 @@ class Rocket {
     force.limit(this.maxForce);
     this.applyForce(force);
     this.thrust = force.mag() / this.maxForce;
+
+    // 출발한 테라에 다시 붙지 않게 밀어내기
+    let fromHome = p5.Vector.sub(this.position, this.home.position);
+    let dh = fromHome.mag();
+    let homeSafe = this.home.radius * 4;
+    if (dh < homeSafe && this.target !== this.home) {
+      fromHome.setMag(this.maxForce * 2 * (1 - dh / homeSafe) + (G * this.home.mass) / max(dh * dh, 1));
+      this.applyForce(fromHome);
+    }
 
     // 태양에 너무 가까우면 밀어내기 (Boid 의 separate 처럼)
     let away = p5.Vector.sub(this.position, sun.position);
